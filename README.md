@@ -57,8 +57,8 @@ loadbalancer
 
 - forks=16
 - inventory=/path/to/your/inventory
-- remote_user=op
-- remote_port=10022
+- remote_user=ubuntu
+- remote_port=2222
 - become=True # 不建议
 
 ## 实战：一键部署科学上网
