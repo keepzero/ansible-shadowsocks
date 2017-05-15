@@ -1,6 +1,4 @@
-# Ansible in BaishanCloud
-
-Ansible 现在在我们白山还不是线上十几使用的配置管理工具，大部分是个别几个运维和开发自己在使用
+# Ansible
 
 分享一下我在白山使用 Ansible 的心得和技巧
 
