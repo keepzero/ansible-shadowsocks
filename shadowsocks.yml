@@ -1,0 +1,108 @@
+---
+# install shadowsocks in docker
+
+- name: install shadowsocks
+  hosts: all
+  #remote_user: ubuntu
+  #become: True
+  remote_user: root
+  gather_facts: False
+  vars:
+    ss_version: 3.0.6
+  vars_files:
+    - vars/password.yml
+
+  pre_tasks:
+    - name: install python
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python)
+    - name: gathering facts
+      setup: gather_subset='!all'
+
+  tasks:
+
+    - name: disable ssh password login
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        regexp: '^PasswordAuthentication'
+        line: 'PasswordAuthentication no'
+        insertafter: '^#PasswordAuthentication yes'
+      notify:
+        - restart sshd
+
+    - name: install dependence
+      apt:
+        name: "{{ item }}"
+        update_cache: yes
+        state: latest
+      with_items:
+        - apt-transport-https
+        - ca-certificates
+        - python-software-properties
+        - software-properties-common
+        - python-pip
+        - python-setuptools
+
+    - name: add docker apt key
+      apt_key: url=https://download.docker.com/linux/ubuntu/gpg state=present
+    - name: add docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+    - name: install docker-ce
+      apt: name=docker-ce state=latest update_cache=yes
+    - name: install docker-py
+      pip: name=docker-py state=present
+    - name: confirm dockerd is running
+      service: name=docker state=started enabled=yes
+
+    - name: enable google bbr
+      block:
+        - sysctl: name=net.core.default_qdisc value=fq state=present
+        - sysctl: name=net.ipv4.tcp_congestion_control value=bbr state=present
+      when: ansible_kernel | version_compare('4.9', '>=')
+
+    - name: install new kernel then enable google bbr
+      block:
+        - name: install new kernel
+          apt:
+            name: "{{ item }}"
+            state: present
+          with_items:
+            - linux-image-4.10.0-20-generic
+            - linux-image-extra-4.10.0-20-generic
+        - name: reboot
+          shell: "sleep 3 && shutdown -r now"
+          async: 1
+          poll: 0
+        - name: wait for reboot
+          wait_for:
+            port: 22
+            host: "{{ ansible_host|default(inventory_hostname) }}"
+            delay: 30
+            timeout: 300
+            search_regex: OpenSSH 
+          delegate_to: 127.0.0.1
+          become: False
+        - name: assert new kernel
+          shell: uname -r
+          register: reboot_kernel
+          failed_when: reboot_kernel.stdout != '4.10.0-20-generic'
+        - sysctl: name=net.core.default_qdisc value=fq state=present
+        - sysctl: name=net.ipv4.tcp_congestion_control value=bbr state=present
+      when: 
+        - ansible_kernel | version_compare('4.9', '<')
+
+    - name: start ss
+      docker_container:
+        name: shadowsocks
+        image: 'easypi/shadowsocks-libev:{{ ss_version }}'
+        network_mode: host
+        env:
+          METHOD: aes-256-cfb
+          PASSWORD: "{{ ss_password }}"
+        restart_policy: always
+        state: started
+
+  handlers:
+    - name: restart sshd
+      service: name=ssh state=restarted
