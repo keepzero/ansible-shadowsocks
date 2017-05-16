@@ -1,0 +1,18 @@
+---
+# install shadowsocks in docker
+- name: install shadowsocks
+  hosts: all
+  #remote_user: ubuntu
+  #become: True
+  remote_user: root
+  gather_facts: False
+
+  pre_tasks:
+    - name: install python
+      raw: test -e /usr/bin/python || (apt -y update && apt install -y python)
+    - name: gathering facts
+      setup: gather_subset='!all'
+
+  roles:
+    - common
+    - shadowsocks

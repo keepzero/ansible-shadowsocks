@@ -1,6 +1,5 @@
 ---
 # install shadowsocks in docker
-
 - name: install shadowsocks
   hosts: all
   #remote_user: ubuntu
@@ -13,10 +12,15 @@
     - vars/password.yml
 
   pre_tasks:
+    - setup: gather_subset='!all'
+      register: setup_result
+      ignore_errors: yes
     - name: install python
       raw: test -e /usr/bin/python || (apt -y update && apt install -y python)
+      when: setup_result|failed
     - name: gathering facts
       setup: gather_subset='!all'
+      when: setup_result|failed
 
   tasks:
 
@@ -41,25 +45,55 @@
         - software-properties-common
         - python-pip
         - python-setuptools
+      when: ansible_distribution == 'Ubuntu'
 
-    - name: add docker apt key
-      apt_key: url=https://download.docker.com/linux/ubuntu/gpg state=present
-    - name: add docker repository
-      apt_repository:
-        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
-        state: present
-    - name: install docker-ce
-      apt: name=docker-ce state=latest update_cache=yes
-    - name: install docker-py
-      pip: name=docker-py state=present
-    - name: confirm dockerd is running
-      service: name=docker state=started enabled=yes
+    - name: install dependence
+      yum:
+        name: "{{ item }}"
+        update_cache: yes
+        state: latest
+      with_items:
+        - python-pip
+        - python-setuptools
+      when: ansible_distribution == 'CentOS'
+
+    - name: install docker for ubuntu
+      block:
+        - name: add docker apt key
+          apt_key: url=https://download.docker.com/linux/ubuntu/gpg state=present
+        - name: add docker repository
+          apt_repository:
+            repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+            state: present
+        - name: install docker-ce
+          apt: name=docker-ce state=latest update_cache=yes
+        - name: install docker-py
+          pip: name=docker-py state=present
+        - name: confirm dockerd is running
+          service: name=docker state=started enabled=yes
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: install docker for CentOS
+      block:
+        - name: add docker repo
+          yum_repository:
+            name: docker
+            baseurl: "https://download.docker.com/linux/centos/7/$basearch/stable"
+            enabled: yes
+            gpgcheck: no
+        - name: install docker
+          yum: name=docker-ce state=present
+        - name: enable docker
+          service: name=docker state=started enabled=yes
+      when: ansible_distribution == 'CentOS'
 
     - name: enable google bbr
       block:
         - sysctl: name=net.core.default_qdisc value=fq state=present
         - sysctl: name=net.ipv4.tcp_congestion_control value=bbr state=present
-      when: ansible_kernel | version_compare('4.9', '>=')
+      when: 
+        - ansible_distribution == 'Ubuntu' 
+        - ansible_kernel | version_compare('4.9', '>=')
 
     - name: install new kernel then enable google bbr
       block:
@@ -90,6 +124,7 @@
         - sysctl: name=net.core.default_qdisc value=fq state=present
         - sysctl: name=net.ipv4.tcp_congestion_control value=bbr state=present
       when: 
+        - ansible_distribution == 'Ubuntu'
         - ansible_kernel | version_compare('4.9', '<')
 
     - name: start ss

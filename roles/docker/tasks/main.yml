@@ -1,0 +1,29 @@
+- name: install docker for ubuntu
+  block:
+    - name: add docker apt key
+      apt_key: url=https://download.docker.com/linux/ubuntu/gpg state=present
+    - name: add docker repository
+      apt_repository:
+        repo: "deb [arch=amd64] https://download.docker.com/linux/ubuntu {{ ansible_distribution_release }} stable"
+        state: present
+    - name: install docker-ce
+      apt: name=docker-ce state=latest update_cache=yes
+    - name: install docker-py
+      pip: name=docker-py state=present
+    - name: confirm dockerd is running
+      service: name=docker state=started enabled=yes
+  when: ansible_distribution == 'Ubuntu'
+
+- name: install docker for CentOS
+  block:
+    - name: add docker repo
+      yum_repository:
+        name: docker
+        baseurl: "https://download.docker.com/linux/centos/7/$basearch/stable"
+        enabled: yes
+        gpgcheck: no
+    - name: install docker
+      yum: name=docker-ce state=present
+    - name: enable docker
+      service: name=docker state=started enabled=yes
+  when: ansible_distribution == 'CentOS'

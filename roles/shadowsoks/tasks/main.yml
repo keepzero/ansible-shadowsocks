@@ -1,0 +1,50 @@
+- name: enable google bbr
+  block:
+    - sysctl: name=net.core.default_qdisc value=fq state=present
+    - sysctl: name=net.ipv4.tcp_congestion_control value=bbr state=present
+  when: 
+    - ansible_distribution == 'Ubuntu' 
+    - ansible_kernel | version_compare('4.9', '>=')
+
+- name: install new kernel then enable google bbr
+  block:
+    - name: install new kernel
+      apt:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - linux-image-4.10.0-20-generic
+        - linux-image-extra-4.10.0-20-generic
+    - name: reboot
+      shell: "sleep 3 && shutdown -r now"
+      async: 1
+      poll: 0
+    - name: wait for reboot
+      wait_for:
+        port: 22
+        host: "{{ ansible_host|default(inventory_hostname) }}"
+        delay: 30
+        timeout: 300
+        search_regex: OpenSSH 
+      delegate_to: 127.0.0.1
+      become: False
+    - name: assert new kernel
+      shell: uname -r
+      register: reboot_kernel
+      failed_when: reboot_kernel.stdout != '4.10.0-20-generic'
+    - sysctl: name=net.core.default_qdisc value=fq state=present
+    - sysctl: name=net.ipv4.tcp_congestion_control value=bbr state=present
+  when: 
+    - ansible_distribution == 'Ubuntu'
+    - ansible_kernel | version_compare('4.9', '<')
+
+- name: start ss
+  docker_container:
+    name: shadowsocks
+    image: 'easypi/shadowsocks-libev:{{ ss_version }}'
+    network_mode: host
+    env:
+      METHOD: aes-256-cfb
+      PASSWORD: "{{ ss_password }}"
+    restart_policy: always
+    state: started

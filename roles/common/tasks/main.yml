@@ -1,0 +1,32 @@
+- name: disable ssh password login
+  lineinfile:
+    path: /etc/ssh/sshd_config
+    regexp: '^PasswordAuthentication'
+    line: 'PasswordAuthentication no'
+    insertafter: '^#PasswordAuthentication yes'
+  notify:
+    - restart sshd
+
+- name: install dependence
+  apt:
+    name: "{{ item }}"
+    update_cache: yes
+    state: latest
+  with_items:
+    - apt-transport-https
+    - ca-certificates
+    - python-software-properties
+    - software-properties-common
+    - python-pip
+    - python-setuptools
+  when: ansible_distribution == 'Ubuntu'
+
+- name: install dependence
+  yum:
+    name: "{{ item }}"
+    update_cache: yes
+    state: latest
+  with_items:
+    - python-pip
+    - python-setuptools
+  when: ansible_distribution == 'CentOS'
